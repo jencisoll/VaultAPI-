@@ -5,43 +5,52 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/jencisoll/vaultapi/internal/application"
 	"github.com/jencisoll/vaultapi/internal/domain"
 )
 
-// Este middleware es el portero del edificio. Si no traes un token válido, no pasas ni al lobby.
-func AuthMiddleware(secret []byte) func(http.Handler) http.Handler {
+type contextKey string
+
+const claimsKey contextKey = "claims"
+
+// Auth extrae y valida el Bearer token. Inyecta los claims en el context.
+func Auth(authSvc *application.AuthService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "Falta el header de autorización", http.StatusUnauthorized)
+			header := r.Header.Get("Authorization")
+			if !strings.HasPrefix(header, "Bearer ") {
+				writeError(w, http.StatusUnauthorized, "missing bearer token")
 				return
 			}
 
-			// El header suele venir como "Bearer <token>". Tenemos que limpiar eso para quedarnos solo con el JWT.
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				http.Error(w, "Formato de token inválido", http.StatusUnauthorized)
+			tokenStr := strings.TrimPrefix(header, "Bearer ")
+			claims, err := authSvc.ValidateAccessToken(r.Context(), tokenStr)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
 
-			tokenString := parts[1]
-			claims := &domain.Claims{}
-
-			// Parseamos y validamos el token. Si algo falla aquí, al usuario no le dejamos entrar.
-			token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-				return secret, nil
-			})
-
-			if err != nil || !token.Valid {
-				http.Error(w, "Token inválido o expirado", http.StatusUnauthorized)
-				return
-			}
-
-			// Inyectamos los claims en el contexto. Así, más adelante, los handlers saben quién está haciendo la petición.
-			ctx := context.WithValue(r.Context(), "user", claims)
+			ctx := context.WithValue(r.Context(), claimsKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// RequireRole verifica que el usuario tenga el rol necesario.
+func RequireRole(role domain.Role) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := ClaimsFromContext(r.Context())
+			if claims == nil || claims.Role != role {
+				writeError(w, http.StatusForbidden, "insufficient permissions")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func ClaimsFromContext(ctx context.Context) *domain.Claims {
+	claims, _ := ctx.Value(claimsKey).(*domain.Claims)
+	return claims
 }
