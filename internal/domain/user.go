@@ -2,9 +2,11 @@ package domain
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"regexp"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type Role string
@@ -41,13 +43,14 @@ func (u *User) ValidateEmail() error {
 }
 
 type TokenPair struct {
-	AccessToken string 'json:"access_token"'
-	RefreshToken string 'json:"refresh_token"'
-	ExpiresIn int      'json:"expires_in"'  //segundos
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"` //segundos
 }
 
 type Claims struct {
-	UserID uuid.UUID  'Json"sub"'
-	Email  string    'Json"email"'
-	Role   Role      'Json"role"'
+	UserID uuid.UUID `json:"sub"`
+	Email  string    `json:"email"`
+	Role   Role      `json:"role"`
+	jwt.RegisteredClaims
 }

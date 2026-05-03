@@ -13,13 +13,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE refresh_tokens (
     id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash  TEXT NOT NULL UNIQUE,
 
     family UUID NOT NULL DEFAULT uuid_generate_v4(),
     expires_at TIMESTAMPTZ NOT NULL,
     revoked     BOOLEAN NOT  NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ   NOT NULL DEFAULT NOT()
+    created_at TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_refresh_tokens_user ON  refresh_tokens(user_id);
